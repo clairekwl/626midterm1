@@ -10,6 +10,6 @@ This repository contains my R code file.
  
  Finally, at the ends of both of these sections are codes that writes the predictions into a final txt file for submission.
  
- The entire rmd should run smoothly from top to bottom as long as the training and test files are downloaded and the corresponding packages for the ML algorithms.
+ The entire rmd should run smoothly from top to bottom as long as the train, test files, and the corresponding packages for the ML algorithms are downloaded.
  
  
