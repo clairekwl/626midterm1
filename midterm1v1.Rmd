@@ -1,0 +1,188 @@
+---
+title: "classification code"
+output: html_document
+date: '2023-03-20'
+---
+
+# loadding and cleaning the dataset for training
+```{r}
+training = read.table("training_data.txt", header = FALSE)
+testing = read.table("test_data.txt", header = FALSE)
+
+nrow(training); nrow(testing)
+
+# copy first row to header
+names(training) = training[1, ]
+names(testing) = testing[1, ]
+# delete first row
+training = training[-1, ]
+testing = testing[-1, ]
+
+# convert all columns to numeric
+training[] = sapply(training, as.numeric)
+testing[] = sapply(testing, as.numeric)
+
+head(training, 10)
+head(testing, 10)
+```
+
+```{r}
+# looking at the key columns
+table(training$subject)
+table(training$activity)
+table(testing$subject)
+```
+
+We can see that there are 30 subjects in training data.  
+Each feature is between -1 and 1, but not neccessarily normally distributed.  
+Activity goes from 1 to 12:  
+1. static -> standing sitting lying. 
+2. dynamic -> walking, walking downstairs, walking upstairs. 
+3. transition -> stand2sit, sit2stand, sit2lie, lie2sit, stand2lie, lie2stand.  
+6 postural transitions belong to static.
+
+### Task 1: Binary classification
+```{r}
+# create new column for static (0) vs dynamic (1)
+binary_res = ifelse(training$activity <= 3, 1, 0)
+training$stat_dyn = binary_res
+
+# hold out validation procedure; 70% training and 30% testing from training
+sample = sample(c(TRUE, FALSE), nrow(training), replace = TRUE, 
+                 prob = c(0.75, 0.25))
+train_sub = training[sample, ]
+test_sub = training[!sample, ]
+
+head(training, 100)
+```
+
+# Random Forest
+```{r}
+library(randomForest)
+library(caret)
+
+rf = randomForest(as.factor(stat_dyn) ~ ., data = train_sub[, 3:564], ntree = 501) 
+rf
+
+pred_test = predict(rf, newdata = test_sub, type = "class")
+confusionMatrix(table(pred_test, test_sub$stat_dyn))
+```
+Accuracy 0.991 -> 1.
+
+# Predict on test dataset (binary-class)
+```{r}
+pred_test_real = predict(rf, newdata = testing, type = "class")
+
+write.table(pred_test_real, "/Users/clairekong/Desktop/U-M/Winter 23/626 ML/midterm 1/binary_okok.txt", 
+            row.names = FALSE, quote = FALSE)
+
+# compare previous submission to current file
+bin1 = read.table("binary_okok.txt", header = FALSE)
+bin2 = read.table("binary_1106.txt", header = FALSE)
+
+length(bin1$V1) - sum(bin1$V1 == bin2$V1)
+```
+
+
+### Multi-class classification
+```{r}
+training = read.table("training_data.txt", header = FALSE)
+# copy first row to header
+names(training) = training[1, ]
+# delete first row
+training = training[-1, ]
+# convert all columns to numeric
+training[] = sapply(training, as.numeric)
+
+activities = c(training$activity)
+for (i in 1:nrow(training)) {
+  if (training$activity[i] >= 7) { activities[i] = 7 }
+}
+training$activity_res = activities
+head(training, 100)
+```
+
+# overfitting not a problem with RF so can set ntrees high, but can tune mtry.
+```{r}
+# hold out validation procedure; 
+sample = sample(c(TRUE, FALSE), nrow(training), replace = TRUE, 
+                 prob = c(0.75, 0.25))
+train_sub1 = training[sample, ]
+test_sub1 = training[!sample, ]
+```
+
+# LDA attempt
+```{r}
+library(caret)
+library(MASS)
+
+train_sub1$activity_res = as.factor(train_sub1$activity_res)
+
+fit_lda <- lda(activity_res ~ ., data = train_sub1[, 3:564])
+pred_lda <- predict(fit_lda, newdata = test_sub1)
+confusionMatrix(table(pred_lda$class, test_sub1$activity_res))
+```
+Accuracy of 0.9787.
+
+# KNN attempt
+```{r}
+# fit on train set
+knn_fit <- train(activity_res ~ ., data = train_sub1[, 3:564], method = "knn", 
+                 trControl = trainControl(method = "cv", number = 10))
+knn_fit
+
+# check model accuracy on test set
+knn_pred = predict(knn_fit, newdata = test_sub1, type = "prob")
+knn_cm = confusionMatrix(knn_pred$class, as.factor(test2[, 3]), mode = "everything")
+knn_cm
+```
+
+# Random Forest Attempt
+```{r}
+rf1 = randomForest(activity_res ~ ., data = train_sub1[, 3:564], ntree = 501, importance = TRUE) 
+rf1 = randomForest(activity_res ~ ., data = train_sub1[, 3:564], ntree = 1000) 
+pred_test1 = predict(rf1, newdata = test_sub1, type = "class")
+confusionMatrix(table(pred_test1, test_sub1$activity_res))
+```
+Accuracy: 0.973? -> 0.9767 -> 0.9836 on last trial.
+
+
+# Predict on test dataset (multi-class)
+```{r}
+# pred_test_real1 = predict(rf1, newdata = testing, type = "class")
+pred_test_real1 = predict(rf1, newdata = testing, type = "class")
+length(pred_test_real1)
+
+write.table(pred_test_real1, "/Users/clairekong/Desktop/U-M/Winter 23/626 ML/midterm 1/multiclass_okok.txt", 
+            row.names = FALSE, quote = FALSE)
+```
+
+```{r}
+# compare previous to current submission
+multi1 = read.table("multiclass_okok_4.txt", header = FALSE)
+multi2 = read.table("multiclass_okok.txt", header = FALSE)
+
+length(multi1$V1) - sum(multi1$V1 == multi2$V1)
+```
+50 prediction difference.
+
+https://rstudio-pubs-static.s3.amazonaws.com/456044_9c275b0718a64e6286751bb7c60ae42a.html
+
+# Select top N important features (dimensional reduction)
+```{r}
+# Conditional=True, adjusts for correlations between predictors.
+importance_scores = importance(rf1)
+sorted_importance_scores = importance_scores[order(importance_scores, decreasing = TRUE), ]
+N <- 100
+selected_features = sorted_importance_scores[1:N]
+selected_features = rownames(as.data.frame(selected_features))
+
+predictors = train_sub1[, 3:563]
+subset_predictors = as.data.frame(predictors[, selected_features])
+
+rf2 = randomForest(train_sub1$activity_res ~ ., data = subset_predictors, ntree = 501) 
+rf2
+pred_test2 = predict(rf2, newdata = test_sub1, type = "class")
+confusionMatrix(table(pred_test2, test_sub1$activity_res))
+```
+Accuracy of 0.9815, using 501 trees.
