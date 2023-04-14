@@ -122,7 +122,7 @@ fit_lda <- lda(activity_res ~ ., data = train_sub1[, 3:564])
 pred_lda <- predict(fit_lda, newdata = test_sub1)
 confusionMatrix(table(pred_lda$class, test_sub1$activity_res))
 ```
-Accuracy of 0.9787.
+Accuracy of 0.9833.
 
 # KNN attempt
 ```{r}
@@ -133,18 +133,21 @@ knn_fit
 
 # check model accuracy on test set
 knn_pred = predict(knn_fit, newdata = test_sub1, type = "prob")
-knn_cm = confusionMatrix(knn_pred$class, as.factor(test2[, 3]), mode = "everything")
-knn_cm
+confusionMatrix(table(pred_test1, test_sub1$activity_res))
 ```
+Accuracy of 0.9807.
 
 # Random Forest Attempt
 ```{r}
+library(randomForest)
+rf1 = randomForest(activity_res ~ ., data = train_sub1[, 3:564]) 
+
+# tuning
 rf1 = randomForest(activity_res ~ ., data = train_sub1[, 3:564], ntree = 501, importance = TRUE) 
-rf1 = randomForest(activity_res ~ ., data = train_sub1[, 3:564], ntree = 1000) 
 pred_test1 = predict(rf1, newdata = test_sub1, type = "class")
 confusionMatrix(table(pred_test1, test_sub1$activity_res))
 ```
-Accuracy: 0.973? -> 0.9767 -> 0.9836 on last trial.
+Accuracy: 0.9807 -> 0.9836 on last trial.
 
 
 # Predict on test dataset (multi-class)
